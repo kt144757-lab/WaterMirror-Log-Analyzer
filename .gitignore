@@ -1,6 +1,5 @@
-data/logs/
-data/.log_cursor.json
-data/*.csv
+data/
 output/
 *.html
 __pycache__/
+
