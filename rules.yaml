@@ -1,0 +1,87 @@
+# 日志解析规则库 rules.yaml
+# 设计原则：
+#  1. 每条规则 = 正则模板 → 事件类型 + 字段（命名组提取）
+#  2. 新增日志源只需在此加 patterns，不改解析代码
+#  3. 进程名/事件名全部动态提取，零硬编码
+#  4. 匹配不到的行进入"未知类"兜底，绝不静默丢弃
+
+sources:
+  - name: auth
+    path: data/logs/auth.log
+    type: auth
+  - name: nginx
+    path: data/logs/nginx_access.log
+    type: nginx
+
+patterns:
+  auth:
+    - name: sshd_accepted_password
+      desc: SSH 密码认证登录成功
+      regex: 'Accepted password for (?P<user>\S+) from (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: LOGIN_SUCCESS
+    - name: sshd_accepted_publickey
+      desc: SSH 密钥认证登录成功
+      regex: 'Accepted publickey for (?P<user>\S+) from (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: LOGIN_SUCCESS
+    - name: sshd_failed_password
+      desc: SSH 密码认证失败
+      regex: 'Failed password for (?P<user>\S+) from (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: LOGIN_FAILED
+    - name: sshd_failed_invalid_user
+      desc: SSH 无效用户密码失败
+      regex: 'Failed password for invalid user (?P<user>\S+) from (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: LOGIN_FAILED_INVALID
+    - name: sshd_invalid_user
+      desc: SSH 无效用户探测
+      regex: 'Invalid user (?P<user>\S+) from (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: LOGIN_INVALID_USER
+    - name: sshd_max_auth
+      desc: SSH 认证次数超限（爆破特征）
+      regex: 'maximum authentication attempts exceeded for (?P<user>\S+) from (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: LOGIN_FAILED_MAX
+    - name: sshd_conn_closed
+      desc: SSH 连接关闭（扫描器 preauth 特征）
+      regex: 'Connection closed by (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)(?P<tag>.*)'
+      event: CONN_CLOSED
+    - name: sshd_conn_reset
+      desc: SSH 连接重置
+      regex: 'Connection reset by (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: CONN_RESET
+    - name: sshd_disconnect
+      desc: SSH 断开（已登录用户）
+      regex: 'Disconnected from (?:authenticating user|user) (?P<user>\S+) (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+)'
+      event: DISCONNECT
+    - name: sshd_received_disconnect
+      desc: SSH 收到断开请求
+      regex: 'Received disconnect from (?P<ip>[0-9a-fA-F:.]+) port (?P<port>\d+):\d+: (?P<reason>.*)'
+      event: DISCONNECT
+    - name: pam_session_opened
+      desc: 会话建立（sudo/登录）
+      regex: 'session opened for user (?P<user>\S+)'
+      event: SESSION_OPENED
+    - name: pam_session_closed
+      desc: 会话关闭
+      regex: 'session closed for user (?P<user>\S+)'
+      event: SESSION_CLOSED
+    - name: ssh_new_session
+      desc: SSH 新会话
+      regex: 'New session ''(?P<sid>\d+)'' of user ''(?P<user>\S+)'''
+      event: SESSION_OPENED
+    - name: pam_auth_failure
+      desc: PAM 认证失败
+      regex: 'authentication failure;.*rhost=(?P<ip>\S+)\s+user=(?P<user>\S+)'
+      event: AUTH_FAILURE
+    - name: sshd_startup
+      desc: sshd 启动监听
+      regex: 'Server listening on'
+      event: SERVICE_EVENT
+    - name: password_changed
+      desc: 账号密码变更（异常时可提权信号）
+      regex: 'password for ''(?P<user>\S+)'' changed by'
+      event: ACCOUNT_CHANGE
+
+  nginx:
+    - name: access
+      desc: HTTP 访问
+      regex: '^(?P<ip>\S+) - - \[(?P<date>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) (?P<proto>\S+)" (?P<status>\d+) (?P<size>\d+)(?: "(?P<referer>[^"]*)" "(?P<ua>[^"]*)")?'
+      event: HTTP_REQUEST
