@@ -1,5 +1,6 @@
 data/
 output/
+outline.md
 *.html
 __pycache__/
 
